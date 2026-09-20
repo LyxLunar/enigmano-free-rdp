@@ -42,6 +42,8 @@ jobs:
       shell: powershell
       run: |
         C:\ngrok\ngrok.exe config add-authtoken ${{ secrets.NGROK_SHAHZAIB }}
+        Write-Host "=== ngrok config ==="
+        Get-Content "$env:USERPROFILE\AppData\Local\ngrok\ngrok.yml" -ErrorAction SilentlyContinue
 
     - name: Install build tools
       shell: powershell
@@ -52,18 +54,42 @@ jobs:
     - name: Start ngrok
       shell: powershell
       run: |
-        Start-Process -FilePath "C:\ngrok\ngrok.exe" -ArgumentList "tcp 3389" -WindowStyle Hidden
-        Start-Sleep -Seconds 10
+        Start-Process -FilePath "C:\ngrok\ngrok.exe" -ArgumentList "tcp 3389 --log=stdout --log-format=logfmt" -RedirectStandardOutput C:\ngrok\ngrok.log -RedirectStandardError C:\ngrok\ngrok.err -WindowStyle Hidden
+        Start-Sleep -Seconds 8
+        Write-Host "=== ngrok stdout ==="
+        if (Test-Path C:\ngrok\ngrok.log) { Get-Content C:\ngrok\ngrok.log }
+        Write-Host "=== ngrok stderr ==="
+        if (Test-Path C:\ngrok\ngrok.err) { Get-Content C:\ngrok\ngrok.err }
 
     - name: Show connection info
       shell: powershell
       run: |
-        $ngrokApi = Invoke-RestMethod -Uri "http://localhost:4040/api/tunnels"
-        $publicUrl = $ngrokApi.tunnels[0].public_url
-        $hostOnly = $publicUrl -replace "tcp://", ""
-        Write-Host "HOST=$hostOnly"
-        Write-Host "USER=runneradmin"
-        Write-Host "PASS=P@ssw0rd!"
+        $tries = 0
+        $hostOnly = $null
+        while ($tries -lt 30 -and -not $hostOnly) {
+          $tries++
+          try {
+            $ngrokApi = Invoke-RestMethod -Uri "http://localhost:4040/api/tunnels" -TimeoutSec 3
+            if ($ngrokApi.tunnels.Count -gt 0) {
+              $publicUrl = $ngrokApi.tunnels[0].public_url
+              $hostOnly = $publicUrl -replace "tcp://", ""
+            }
+          } catch {
+            Start-Sleep -Seconds 2
+          }
+        }
+        if ($hostOnly) {
+          Write-Host "========================="
+          Write-Host "HOST=$hostOnly"
+          Write-Host "USER=runneradmin"
+          Write-Host "PASS=P@ssw0rd!"
+          Write-Host "========================="
+        } else {
+          Write-Host "ngrok never came up. Check the previous step log."
+          if (Test-Path C:\ngrok\ngrok.err) { Get-Content C:\ngrok\ngrok.err }
+          if (Test-Path C:\ngrok\ngrok.log) { Get-Content C:\ngrok\ngrok.log }
+          exit 1
+        }
 
     - name: Keep alive
       shell: powershell
