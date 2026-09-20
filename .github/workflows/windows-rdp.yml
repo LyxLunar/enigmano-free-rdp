@@ -18,12 +18,6 @@ jobs:
     - name: Checkout Repository
       uses: actions/checkout@v4
 
-    - name: System Information
-      run: |
-        Write-Host "=== ENIGMANO RDP DEPLOYMENT ===" -ForegroundColor Green
-        Write-Host "Instance Number: ${{ github.event.inputs.instance_number }}" -ForegroundColor Yellow
-        Write-Host "Runner: $env:RUNNER_NAME" -ForegroundColor Yellow
-
     - name: Enable RDP
       run: |
         Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -name "fDenyTSConnections" -Value 0
@@ -67,7 +61,7 @@ jobs:
           Write-Host "Password: P@ssw0rd!" -ForegroundColor White
           Write-Host "==========================" -ForegroundColor Cyan
         } catch {
-          Write-Host "ngrok API not ready, wait 30s and check the log again" -ForegroundColor Red
+          Write-Host "ngrok API not ready, wait and check again" -ForegroundColor Red
         }
 
     - name: Keep Session Alive
@@ -75,6 +69,6 @@ jobs:
         $counter = 0
         while ($true) {
           $counter++
-          Write-Host "Session active - Heartbeat #$counter ($(Get-Date))" -ForegroundColor Green
+          Write-Host "Heartbeat #$counter ($(Get-Date))" -ForegroundColor Green
           Start-Sleep -Seconds 60
         }
