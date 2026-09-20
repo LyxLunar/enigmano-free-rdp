@@ -1,0 +1,80 @@
+name: EnigMano Instance Deployment
+
+on:
+  workflow_dispatch:
+    inputs:
+      instance_number:
+        description: 'Instance Number (1-10)'
+        required: true
+        default: '1'
+        type: string
+
+jobs:
+  deploy-rdp:
+    runs-on: windows-latest
+    timeout-minutes: 360
+
+    steps:
+    - name: Checkout Repository
+      uses: actions/checkout@v4
+
+    - name: System Information
+      run: |
+        Write-Host "=== ENIGMANO RDP DEPLOYMENT ===" -ForegroundColor Green
+        Write-Host "Instance Number: ${{ github.event.inputs.instance_number }}" -ForegroundColor Yellow
+        Write-Host "Runner: $env:RUNNER_NAME" -ForegroundColor Yellow
+
+    - name: Enable RDP
+      run: |
+        Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -name "fDenyTSConnections" -Value 0
+        Enable-NetFirewallRule -DisplayGroup "Remote Desktop"
+        Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -name "UserAuthentication" -Value 1
+
+    - name: Create User Account
+      run: |
+        $Password = ConvertTo-SecureString "P@ssw0rd!" -AsPlainText -Force
+        Set-LocalUser -Name "runneradmin" -Password $Password
+        Add-LocalGroupMember -Group "Remote Desktop Users" -Member "runneradmin"
+
+    - name: Download and Setup ngrok
+      run: |
+        Invoke-WebRequest -Uri "https://bin.equinox.io/c/bNyj1mQVY4c/ngrok-v3-stable-windows-amd64.zip" -OutFile "ngrok.zip"
+        Expand-Archive ngrok.zip -DestinationPath C:\ngrok
+
+    - name: Configure ngrok
+      run: |
+        C:\ngrok\ngrok.exe config add-authtoken ${{ secrets.NGROK_SHAHZAIB }}
+
+    - name: Install MinGW
+      run: |
+        choco install mingw -y
+        choco install make -y
+
+    - name: Start ngrok Tunnel
+      run: |
+        Start-Process -FilePath "C:\ngrok\ngrok.exe" -ArgumentList "tcp 3389" -WindowStyle Hidden
+        Start-Sleep -Seconds 10
+
+    - name: Get Connection Details
+      run: |
+        try {
+          $ngrokApi = Invoke-RestMethod -Uri "http://localhost:4040/api/tunnels"
+          $publicUrl = $ngrokApi.tunnels[0].public_url
+          $host = $publicUrl -replace "tcp://", ""
+          Write-Host "==========================" -ForegroundColor Cyan
+          Write-Host "Host: $host" -ForegroundColor White
+          Write-Host "Username: runneradmin" -ForegroundColor White
+          Write-Host "Password: P@ssw0rd!" -ForegroundColor White
+          Write-Host "==========================" -ForegroundColor Cyan
+        } catch {
+          Write-Host "ngrok API not ready, wait 30s and check the log again" -ForegroundColor Red
+        }
+
+    - name: Keep Session Alive
+      run: |
+        $counter = 0
+        while ($true) {
+          $counter++
+          Write-Host "Session active - Heartbeat #$counter ($(Get-Date))" -ForegroundColor Green
+          Start-Sleep -Seconds 60
+        }
